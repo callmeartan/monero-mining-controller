@@ -17,11 +17,19 @@ from rich.columns import Columns
 from rich.align import Align
 from rich.markdown import Markdown
 
+def get_script_dir():
+    """Get the directory where the script is located"""
+    return Path(__file__).parent.absolute()
+
 class PoolSelector:
     """Handles pool selection and comparison"""
 
-    def __init__(self, pools_file="pools.json"):
-        self.pools_file = pools_file
+    def __init__(self, pools_file=None):
+        if pools_file is None:
+            pools_file = get_script_dir() / "pools.json"
+        elif not Path(pools_file).is_absolute():
+            pools_file = get_script_dir() / pools_file
+        self.pools_file = str(pools_file)
         self.pools = []
         self.load_pools()
 
@@ -144,8 +152,12 @@ class PoolSelector:
 class CPUController:
     """Handles CPU configuration and control"""
 
-    def __init__(self, config_file="config.json"):
-        self.config_file = config_file
+    def __init__(self, config_file=None):
+        if config_file is None:
+            config_file = get_script_dir() / "config.json"
+        elif not Path(config_file).is_absolute():
+            config_file = get_script_dir() / config_file
+        self.config_file = str(config_file)
 
     def get_cpu_info(self):
         """Get CPU information"""
@@ -247,6 +259,7 @@ class MiningMonitor:
 
     def __init__(self, xmrig_process=None):
         self.xmrig_process = xmrig_process
+        self.start_time = time.time()
         self.stats = {
             'hashrate': 0.0,
             'shares': {'accepted': 0, 'rejected': 0},
@@ -382,9 +395,19 @@ class MiningMonitor:
 class XMRigController:
     """Main controller for XMRig process management"""
 
-    def __init__(self, xmrig_path="./xmrig", config_path="./config.json"):
-        self.xmrig_path = xmrig_path
-        self.config_path = config_path
+    def __init__(self, xmrig_path=None, config_path=None):
+        script_dir = get_script_dir()
+        if xmrig_path is None:
+            xmrig_path = script_dir / "xmrig"
+        elif not Path(xmrig_path).is_absolute():
+            xmrig_path = script_dir / xmrig_path
+        self.xmrig_path = str(xmrig_path)
+        
+        if config_path is None:
+            config_path = script_dir / "config.json"
+        elif not Path(config_path).is_absolute():
+            config_path = script_dir / config_path
+        self.config_path = str(config_path)
         self.xmrig_process = None
         self.monitor = MiningMonitor()
 
@@ -551,9 +574,11 @@ class MiningUI:
         elif choice == "4":
             if not self.selected_pool:
                 self.console.print("[red]Please select a mining pool first![/red]")
+                Prompt.ask("\nPress Enter to continue", default="", show_default=False)
                 return
             if not self.wallet_address:
                 self.console.print("[red]Please set your wallet address first![/red]")
+                Prompt.ask("\nPress Enter to continue", default="", show_default=False)
                 return
 
             # Update config with pool and wallet
@@ -565,6 +590,7 @@ class MiningUI:
                     self.console.print(f"[red]{message}[/red]")
             else:
                 self.console.print("[red]Failed to update configuration[/red]")
+            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
 
         elif choice == "5":
             success, message = self.xmrig_controller.stop_mining()
@@ -572,10 +598,12 @@ class MiningUI:
                 self.console.print(f"[yellow]{message}[/yellow]")
             else:
                 self.console.print(f"[red]{message}[/red]")
+            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
 
         elif choice == "6":
             if not self.selected_pool or not self.wallet_address:
                 self.console.print("[red]Please select pool and set wallet address first![/red]")
+                Prompt.ask("\nPress Enter to continue", default="", show_default=False)
                 return
 
             if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address):
@@ -586,12 +614,15 @@ class MiningUI:
                     self.console.print(f"[red]{message}[/red]")
             else:
                 self.console.print("[red]Failed to update configuration[/red]")
+            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
 
         elif choice == "7":
             self._view_configuration()
+            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
 
         elif choice == "8":
             self.pool_selector.display_pool_comparison(self.console)
+            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
 
         elif choice == "0":
             self.xmrig_controller.stop_mining()
@@ -599,6 +630,7 @@ class MiningUI:
 
         else:
             self.console.print("[red]Invalid choice![/red]")
+            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
 
     def _set_wallet_address(self):
         """Set wallet address"""
@@ -653,12 +685,22 @@ class MiningUI:
         else:
             self.console.print("[red]Could not load configuration[/red]")
 
-    def run(self):
-        """Main UI loop"""
+    def _display_ui(self):
+        """Display the current UI state"""
         self.console.clear()
         self.console.print("[bold blue]🚀 Monero Mining Controller[/bold blue]")
         self.console.print("[dim]Control your XMRig mining with dynamic CPU allocation[/dim]\n")
+        
+        # Create layout
+        stats_panel = self.create_stats_panel()
+        menu_panel = self.create_menu_panel()
+        
+        layout = Columns([stats_panel, menu_panel], equal=True)
+        self.console.print(Align.center(layout))
+        self.console.print()  # Add a blank line before prompt
 
+    def run(self):
+        """Main UI loop"""
         # Setup signal handlers
         def signal_handler(sig, frame):
             self.console.print("\n[yellow]Shutting down...[/yellow]")
@@ -668,24 +710,19 @@ class MiningUI:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-        with Live(console=self.console, refresh_per_second=2) as live:
-            while self.running:
-                # Create layout
-                stats_panel = self.create_stats_panel()
-                menu_panel = self.create_menu_panel()
-
-                layout = Columns([stats_panel, menu_panel], equal=True)
-                live.update(Align.center(layout))
-
-                # Get user input
-                try:
-                    choice = Prompt.ask("", console=self.console, show_default=False)
-                    self.handle_menu_choice(choice)
-                except KeyboardInterrupt:
-                    self.xmrig_controller.stop_mining()
-                    break
-                except EOFError:
-                    break
+        while self.running:
+            # Display the UI
+            self._display_ui()
+            
+            # Get user input
+            try:
+                choice = Prompt.ask("Enter your choice", console=self.console, show_default=False)
+                self.handle_menu_choice(choice)
+            except KeyboardInterrupt:
+                self.xmrig_controller.stop_mining()
+                break
+            except EOFError:
+                break
 
         self.console.print("[yellow]Goodbye![/yellow]")
 
@@ -697,12 +734,17 @@ def main():
         sys.exit(1)
 
     # Check for required files
-    required_files = ["./xmrig", "./config.json", "./pools.json"]
+    script_dir = get_script_dir()
+    required_files = [
+        script_dir / "xmrig",
+        script_dir / "config.json",
+        script_dir / "pools.json"
+    ]
     missing_files = []
 
     for file_path in required_files:
-        if not Path(file_path).exists():
-            missing_files.append(file_path)
+        if not file_path.exists():
+            missing_files.append(str(file_path))
 
     if missing_files:
         print("Missing required files:")
