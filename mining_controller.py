@@ -291,16 +291,39 @@ class MiningMonitor:
         if not self.xmrig_process:
             return
 
+        import select
+        import os
+
         try:
             while self.monitoring and self.xmrig_process.poll() is None:
-                # Read stdout line by line
-                if hasattr(self.xmrig_process, 'stdout') and self.xmrig_process.stdout:
-                    line = self.xmrig_process.stdout.readline()
-                    if line:
-                        self._parse_xmrig_line(line.decode('utf-8', errors='ignore').strip())
-                time.sleep(0.1)
-        except Exception:
-            pass  # Silently handle monitoring errors
+                # Use select to check if data is available (non-blocking)
+                if hasattr(self.xmrig_process.stdout, 'fileno'):
+                    try:
+                        # Check if stdout has data available
+                        ready, _, _ = select.select([self.xmrig_process.stdout], [], [], 0.1)
+                        if ready:
+                            line = self.xmrig_process.stdout.readline()
+                            if line:
+                                self._parse_xmrig_line(line.strip())
+                    except (OSError, ValueError):
+                        # Handle case where fileno is not available or select fails
+                        time.sleep(0.1)
+                        continue
+                else:
+                    # Fallback for systems where select doesn't work
+                    try:
+                        line = self.xmrig_process.stdout.readline()
+                        if line:
+                            self._parse_xmrig_line(line.strip())
+                        else:
+                            time.sleep(0.1)
+                    except:
+                        time.sleep(0.1)
+
+        except Exception as e:
+            # Log the error but don't crash
+            print(f"Monitoring error: {e}")
+            pass
 
     def _parse_xmrig_line(self, line):
         """Parse XMRig output line for statistics"""
@@ -473,17 +496,45 @@ class XMRigController:
             return False, "XMRig is already running"
 
         try:
+            # Check if XMRig executable exists and is executable
+            if not os.path.exists(self.xmrig_path):
+                return False, f"XMRig executable not found: {self.xmrig_path}"
+
+            if not os.access(self.xmrig_path, os.X_OK):
+                return False, f"XMRig executable not executable: {self.xmrig_path}"
+
+            # Start XMRig process with proper pipe handling
             self.xmrig_process = subprocess.Popen(
                 [self.xmrig_path, "-c", self.config_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                universal_newlines=True
+                universal_newlines=True,
+                # Prevent blocking on pipes
+                stdin=subprocess.DEVNULL,
+                # Add environment and working directory
+                cwd=os.path.dirname(self.xmrig_path) if os.path.dirname(self.xmrig_path) else None
             )
 
-            self.monitor.start_monitoring(self.xmrig_process)
-            return True, "XMRig started successfully"
+            # Wait up to 3 seconds for process to start properly
+            start_time = time.time()
+            while time.time() - start_time < 3.0:
+                if self.xmrig_process.poll() is None:
+                    # Process is running, start monitoring
+                    self.monitor.start_monitoring(self.xmrig_process)
+                    return True, "XMRig started successfully"
+                time.sleep(0.1)
+
+            # Process didn't start within timeout
+            if self.xmrig_process.poll() is not None:
+                return_code = self.xmrig_process.returncode
+                return False, f"XMRig failed to start (exit code: {return_code})"
+            else:
+                # Process started but took too long to respond
+                self.monitor.start_monitoring(self.xmrig_process)
+                return True, "XMRig started (initializing...)"
+
         except Exception as e:
             return False, f"Failed to start XMRig: {e}"
 
@@ -648,6 +699,8 @@ class MiningUI:
         menu_text.append("6. Restart with New Settings\n", style="magenta")
         menu_text.append("7. View Current Configuration\n", style="white")
         menu_text.append("8. View Pool Comparison\n", style="white")
+        menu_text.append("9. View XMRig Logs\n", style="white")
+        menu_text.append("10. Check Mining Status\n", style="white")
         menu_text.append("0. Exit\n", style="red")
 
         return Panel(menu_text, title="Menu", border_style="green")
@@ -691,14 +744,17 @@ class MiningUI:
 
             # Update config with pool and wallet
             if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address):
+                self.console.print("[yellow]Starting XMRig...[/yellow]")
                 success, message = self.xmrig_controller.start_mining()
                 if success:
                     self.console.print(f"[green]{message}[/green]")
+                    self.console.print("[dim]Check the stats panel for mining status and hashrate[/dim]")
                 else:
                     self.console.print(f"[red]{message}[/red]")
+                    self.console.print("[yellow]Check the XMRig logs for more details (option 9)[/yellow]")
             else:
                 self.console.print("[red]Failed to update configuration[/red]")
-            time.sleep(2)  # Brief pause to show message
+            time.sleep(3)  # Longer pause to show message
 
         elif choice == "5":
             success, message = self.xmrig_controller.stop_mining()
@@ -731,6 +787,12 @@ class MiningUI:
         elif choice == "8":
             self.pool_selector.display_pool_comparison(self.console)
             time.sleep(3)  # Longer pause for pool comparison viewing
+
+        elif choice == "9":
+            self._view_xmrig_logs()
+
+        elif choice == "10":
+            self._check_mining_status()
 
         elif choice == "0":
             self.xmrig_controller.stop_mining()
@@ -792,6 +854,77 @@ class MiningUI:
             self.console.print_json(json.dumps(config, indent=2))
         else:
             self.console.print("[red]Could not load configuration[/red]")
+
+    def _view_xmrig_logs(self):
+        """View XMRig log file contents"""
+        log_file = get_script_dir() / "xmrig.log"
+
+        if not log_file.exists():
+            self.console.print("[yellow]No XMRig log file found. Start mining first to generate logs.[/yellow]")
+            self.console.print(f"[dim]Expected location: {log_file}[/dim]")
+            time.sleep(2)
+            return
+
+        try:
+            with open(log_file, 'r') as f:
+                content = f.read()
+
+            if not content.strip():
+                self.console.print("[yellow]Log file is empty. Start mining to generate log entries.[/yellow]")
+            else:
+                self.console.print("[bold]XMRig Logs:[/bold]")
+                self.console.print("[dim]" + "="*50 + "[/dim]")
+                self.console.print(content[-2000:])  # Show last 2000 characters to avoid overwhelming output
+                self.console.print("[dim]" + "="*50 + "[/dim]")
+                self.console.print(f"[dim]Full log available at: {log_file}[/dim]")
+
+        except Exception as e:
+            self.console.print(f"[red]Error reading log file: {e}[/red]")
+
+        time.sleep(3)  # Give time to read the logs
+
+    def _check_mining_status(self):
+        """Check detailed mining process status"""
+        self.console.print("[bold]Mining Process Status:[/bold]")
+
+        # Check if XMRig process exists
+        if not hasattr(self.xmrig_controller, 'xmrig_process') or self.xmrig_controller.xmrig_process is None:
+            self.console.print("❌ [red]No XMRig process found[/red]")
+            return
+
+        process = self.xmrig_controller.xmrig_process
+
+        # Check process status
+        return_code = process.poll()
+        if return_code is None:
+            self.console.print("✅ [green]XMRig process is running[/green]")
+            self.console.print(f"   PID: {process.pid}")
+        else:
+            self.console.print(f"❌ [red]XMRig process exited with code: {return_code}[/red]")
+
+        # Check if monitoring is active
+        if hasattr(self.xmrig_controller.monitor, 'monitoring') and self.xmrig_controller.monitor.monitoring:
+            self.console.print("✅ [green]Monitoring thread is active[/green]")
+        else:
+            self.console.print("❌ [red]Monitoring thread is not active[/red]")
+
+        # Check if log file exists
+        log_file = get_script_dir() / "xmrig.log"
+        if log_file.exists():
+            size = log_file.stat().st_size
+            self.console.print(f"📄 [blue]Log file exists ({size} bytes)[/blue]")
+        else:
+            self.console.print("❌ [red]No log file found[/red]")
+
+        # Show recent stats
+        stats = self.monitor.get_stats_summary()
+        self.console.print(f"\n[bold]Current Stats:[/bold]")
+        self.console.print(f"Status: {stats['status']}")
+        self.console.print(f"Hashrate: {stats['hashrate']:.1f} H/s")
+        self.console.print(f"Accepted: {stats['accepted_shares']}")
+        self.console.print(f"Rejected: {stats['rejected_shares']}")
+
+        time.sleep(4)  # Give time to read the status
 
     def run(self):
         """Main UI loop"""
