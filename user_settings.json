@@ -1,0 +1,19 @@
+{
+  "selected_pool": {
+    "name": "MoneroOcean",
+    "url": "gulf.moneroocean.stream",
+    "port": 10128,
+    "fee": 0.5,
+    "min_payout": 0.003,
+    "type": "PPLNS",
+    "location": "Global",
+    "description": "Popular pool with very low minimum payout and automatic coin switching.",
+    "features": [
+      "Very low min payout",
+      "Auto coin switching",
+      "High hashrate"
+    ],
+    "recommended": true
+  },
+  "wallet_address": "49Kf1F27fG1BfDPPSQeQ94dEQ97FTZ3JkCAP2cwhT3vs7yuUvxfLtkr9zaNpWAefoBFJn1FhPN2qTYyiBHN15ZaTPCqK1ey"
+}

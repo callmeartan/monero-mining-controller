@@ -22,6 +22,27 @@ def get_script_dir():
     """Get the directory where the script is located"""
     return Path(__file__).parent.absolute()
 
+def load_user_settings():
+    """Load user settings from file"""
+    settings_file = get_script_dir() / "user_settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_user_settings(settings):
+    """Save user settings to file"""
+    settings_file = get_script_dir() / "user_settings.json"
+    try:
+        with open(settings_file, 'w') as f:
+            json.dump(settings, f, indent=2)
+        return True
+    except:
+        return False
+
 class PoolSelector:
     """Handles pool selection and comparison"""
 
@@ -575,8 +596,11 @@ class MiningUI:
         self.xmrig_controller = XMRigController()
         self.monitor = self.xmrig_controller.monitor
         self.running = True
-        self.selected_pool = None
-        self.wallet_address = None
+
+        # Load saved settings
+        settings = load_user_settings()
+        self.selected_pool = settings.get('selected_pool')
+        self.wallet_address = settings.get('wallet_address')
 
     def _get_performance_level(self, hashrate):
         """Determine performance level based on hashrate"""
@@ -702,6 +726,7 @@ class MiningUI:
         menu_text.append("9. View XMRig Logs\n", style="white")
         menu_text.append("10. Check Mining Status\n", style="white")
         menu_text.append("11. Troubleshoot Connection\n", style="white")
+        menu_text.append("12. Reset Settings\n", style="yellow")
         menu_text.append("0. Exit\n", style="red")
 
         return Panel(menu_text, title="Menu", border_style="green")
@@ -711,6 +736,11 @@ class MiningUI:
         self.console.clear()
         self.console.print("[bold blue]🚀 Monero Mining Controller[/bold blue]")
         self.console.print("[dim]Control your XMRig mining with dynamic CPU allocation[/dim]\n")
+
+        # Show welcome message if settings are configured
+        if self.selected_pool and self.wallet_address:
+            self.console.print(f"[green]✅ Ready to mine![/green] Pool: {self.selected_pool['name']} | Wallet: {self.wallet_address[:10]}...")
+            self.console.print("[dim]Press 4 to start mining immediately[/dim]\n")
 
         # Create layout
         stats_panel = self.create_stats_panel()
@@ -723,9 +753,15 @@ class MiningUI:
     def handle_menu_choice(self, choice):
         """Handle menu selection"""
         if choice == "1":
+            old_pool = self.selected_pool
             self.selected_pool = self.pool_selector.select_pool_interactive(self.console)
             if self.selected_pool:
                 self.console.print(f"[green]Pool selected: {self.selected_pool['name']}[/green]")
+                # Save setting if it changed
+                if self.selected_pool != old_pool:
+                    settings = load_user_settings()
+                    settings['selected_pool'] = self.selected_pool
+                    save_user_settings(settings)
 
         elif choice == "2":
             self._set_wallet_address()
@@ -798,6 +834,9 @@ class MiningUI:
         elif choice == "11":
             self._troubleshoot_connection()
 
+        elif choice == "12":
+            self._reset_settings()
+
         elif choice == "0":
             self.xmrig_controller.stop_mining()
             self.running = False
@@ -811,8 +850,14 @@ class MiningUI:
         while True:
             wallet = Prompt.ask("Enter your Monero wallet address")
             if wallet and len(wallet) > 50:  # Basic validation
+                old_wallet = self.wallet_address
                 self.wallet_address = wallet
                 self.console.print("[green]Wallet address set![/green]")
+                # Save setting if it changed
+                if self.wallet_address != old_wallet:
+                    settings = load_user_settings()
+                    settings['wallet_address'] = self.wallet_address
+                    save_user_settings(settings)
                 break
             else:
                 self.console.print("[red]Invalid wallet address. Please try again.[/red]")
@@ -1054,6 +1099,24 @@ class MiningUI:
                 self.console.print(f"[green]✅ Switched to {servers[next_index]}[/green]")
             else:
                 self.console.print("[red]❌ Failed to update configuration[/red]")
+
+    def _reset_settings(self):
+        """Reset all user settings"""
+        if Confirm.ask("Are you sure you want to reset all settings? This will clear your saved pool and wallet address."):
+            settings_file = get_script_dir() / "user_settings.json"
+            try:
+                if settings_file.exists():
+                    settings_file.unlink()
+                self.selected_pool = None
+                self.wallet_address = None
+                self.console.print("[green]✅ All settings have been reset[/green]")
+                self.console.print("[dim]You'll need to reconfigure your pool and wallet address[/dim]")
+            except Exception as e:
+                self.console.print(f"[red]❌ Failed to reset settings: {e}[/red]")
+        else:
+            self.console.print("[yellow]Settings reset cancelled[/yellow]")
+
+        time.sleep(3)
 
     def run(self):
         """Main UI loop"""
