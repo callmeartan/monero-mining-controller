@@ -8,6 +8,8 @@ import sys
 import queue
 from pathlib import Path
 import psutil
+import urllib.request
+import urllib.error
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
@@ -727,6 +729,7 @@ class MiningUI:
         menu_text.append("10. Check Mining Status\n", style="white")
         menu_text.append("11. Troubleshoot Connection\n", style="white")
         menu_text.append("12. Reset Settings\n", style="yellow")
+        menu_text.append("13. Check Earnings\n", style="bold green")
         menu_text.append("0. Exit\n", style="red")
 
         return Panel(menu_text, title="Menu", border_style="green")
@@ -836,6 +839,9 @@ class MiningUI:
 
         elif choice == "12":
             self._reset_settings()
+
+        elif choice == "13":
+            self._check_earnings()
 
         elif choice == "0":
             self.xmrig_controller.stop_mining()
@@ -1117,6 +1123,111 @@ class MiningUI:
                 self.console.print(f"[red]❌ Failed to reset settings: {e}[/red]")
         else:
             self.console.print("[yellow]Settings reset cancelled[/yellow]")
+
+    def _check_earnings(self):
+        """Check mining earnings from pool API"""
+        if not self.wallet_address:
+            self.console.print("[red]❌ No wallet address configured. Please set your wallet address first (option 2).[/red]")
+            time.sleep(2)
+            return
+
+        if not self.selected_pool:
+            self.console.print("[red]❌ No pool selected. Please select a pool first (option 1).[/red]")
+            time.sleep(2)
+            return
+
+        self.console.print("[bold]💰 Checking Mining Earnings...[/bold]")
+        self.console.print(f"[dim]Wallet: {self.wallet_address[:20]}...[/dim]")
+        self.console.print(f"[dim]Pool: {self.selected_pool['name']}[/dim]\n")
+
+        # Check if it's MoneroOcean (they have a public API)
+        if self.selected_pool['name'] == 'MoneroOcean':
+            try:
+                api_url = f"https://api.moneroocean.stream/miner/{self.wallet_address}/stats"
+                self.console.print("[dim]Fetching data from MoneroOcean API...[/dim]")
+                
+                with urllib.request.urlopen(api_url, timeout=10) as response:
+                    data = json.loads(response.read().decode())
+                
+                # Parse MoneroOcean API response
+                if 'balance' in data:
+                    balance = data.get('balance', 0)
+                    paid = data.get('paid', 0)
+                    total_earned = balance + paid
+                    hashrate = data.get('hashrate', 0)
+                    hashrate_15m = data.get('hashrate_15m', 0)
+                    
+                    table = Table(title="💰 Mining Earnings")
+                    table.add_column("Metric", style="cyan")
+                    table.add_column("Value", style="green")
+                    
+                    # Format balance
+                    balance_xmr = balance / 1000000000000  # Convert from atomic units
+                    paid_xmr = paid / 1000000000000
+                    total_xmr = total_earned / 1000000000000
+                    
+                    table.add_row("Current Balance", f"{balance_xmr:.6f} XMR")
+                    table.add_row("Total Paid", f"{paid_xmr:.6f} XMR")
+                    table.add_row("Total Earned", f"[bold]{total_xmr:.6f} XMR[/bold]")
+                    
+                    # Add hashrate info if available
+                    if hashrate > 0:
+                        hashrate_kh = hashrate / 1000
+                        table.add_row("Current Hashrate", f"{hashrate_kh:.2f} KH/s")
+                    
+                    if hashrate_15m > 0:
+                        hashrate_15m_kh = hashrate_15m / 1000
+                        table.add_row("15m Avg Hashrate", f"{hashrate_15m_kh:.2f} KH/s")
+                    
+                    # Min payout info
+                    min_payout = self.selected_pool.get('min_payout', 0.003)
+                    remaining = max(0, min_payout - balance_xmr)
+                    table.add_row("Min Payout", f"{min_payout:.6f} XMR")
+                    if remaining > 0:
+                        table.add_row("Until Payout", f"{remaining:.6f} XMR")
+                    else:
+                        table.add_row("Payout Status", "[green]✅ Ready for payout![/green]")
+                    
+                    self.console.print(table)
+                    
+                    # Additional info
+                    if 'last_payment' in data and data['last_payment']:
+                        last_payment = data['last_payment'] / 1000000000000
+                        self.console.print(f"\n[dim]Last Payment: {last_payment:.6f} XMR[/dim]")
+                    
+                    self.console.print(f"\n[dim]View full stats: https://moneroocean.stream/#/account/{self.wallet_address}[/dim]")
+                    
+                else:
+                    self.console.print("[yellow]⚠️  No balance data found. You may need to mine for a while before earnings appear.[/yellow]")
+                    
+            except urllib.error.URLError as e:
+                self.console.print(f"[red]❌ Failed to connect to MoneroOcean API: {e}[/red]")
+                self.console.print("[dim]Make sure you have an internet connection.[/dim]")
+            except json.JSONDecodeError:
+                self.console.print("[red]❌ Invalid response from API. Please try again later.[/red]")
+            except Exception as e:
+                self.console.print(f"[red]❌ Error checking earnings: {e}[/red]")
+        else:
+            # For other pools, provide instructions
+            self.console.print(f"[yellow]⚠️  Direct API access not available for {self.selected_pool['name']}[/yellow]")
+            self.console.print("\n[bold]To check your earnings:[/bold]")
+            self.console.print(f"1. Visit your pool's website")
+            self.console.print(f"2. Enter your wallet address: {self.wallet_address[:20]}...")
+            self.console.print(f"3. View your balance and pending payouts")
+            
+            # Provide common pool URLs
+            pool_urls = {
+                'SupportXMR': 'https://supportxmr.com',
+                'MineXMR': 'https://minexmr.com',
+                'P2Pool': 'https://p2pool.io',
+                'Nanopool': 'https://xmr.nanopool.org',
+                'HashVault': 'https://hashvault.pro'
+            }
+            
+            if self.selected_pool['name'] in pool_urls:
+                self.console.print(f"\n[dim]Pool website: {pool_urls[self.selected_pool['name']]}[/dim]")
+        
+        time.sleep(5)  # Give time to read the earnings info
 
         time.sleep(3)
 
