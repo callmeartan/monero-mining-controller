@@ -489,7 +489,7 @@ class XMRigController:
             print(f"Error saving config: {e}")
             return False
 
-    def update_pool_config(self, pool_info, wallet_address):
+    def update_pool_config(self, pool_info, wallet_address, tls_enabled=False):
         """Update pool configuration in XMRig config"""
         config = self.load_config()
         if not config:
@@ -504,7 +504,7 @@ class XMRigController:
             'url': f"{pool_info['url']}:{pool_info['port']}",
             'user': wallet_address,
             'pass': 'x',
-            'tls': True,
+            'tls': tls_enabled,
             'keepalive': True,
             'nicehash': False
         })
@@ -780,7 +780,7 @@ class MiningUI:
                 return
 
             # Update config with pool and wallet
-            if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address):
+            if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address, tls_enabled=False):
                 self.console.print("[yellow]Starting XMRig...[/yellow]")
                 success, message = self.xmrig_controller.start_mining()
                 if success:
@@ -807,7 +807,7 @@ class MiningUI:
                 time.sleep(2)  # Brief pause to show message
                 return
 
-            if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address):
+            if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address, tls_enabled=False):
                 success, message = self.xmrig_controller.restart_mining()
                 if success:
                     self.console.print(f"[green]{message}[/green]")
@@ -1048,6 +1048,8 @@ class MiningUI:
                 return
         except:
             pass
+
+        self.console.print("\n[blue]💡 Tip: Restart mining (option 6) to apply configuration changes[/blue]")
 
         time.sleep(2)
 
