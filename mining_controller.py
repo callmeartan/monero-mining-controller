@@ -701,6 +701,7 @@ class MiningUI:
         menu_text.append("8. View Pool Comparison\n", style="white")
         menu_text.append("9. View XMRig Logs\n", style="white")
         menu_text.append("10. Check Mining Status\n", style="white")
+        menu_text.append("11. Troubleshoot Connection\n", style="white")
         menu_text.append("0. Exit\n", style="red")
 
         return Panel(menu_text, title="Menu", border_style="green")
@@ -793,6 +794,9 @@ class MiningUI:
 
         elif choice == "10":
             self._check_mining_status()
+
+        elif choice == "11":
+            self._troubleshoot_connection()
 
         elif choice == "0":
             self.xmrig_controller.stop_mining()
@@ -925,6 +929,131 @@ class MiningUI:
         self.console.print(f"Rejected: {stats['rejected_shares']}")
 
         time.sleep(4)  # Give time to read the status
+
+    def _troubleshoot_connection(self):
+        """Troubleshoot mining pool connection issues"""
+        self.console.print("[bold]🔧 Mining Connection Troubleshooter[/bold]")
+        self.console.print("=" * 50)
+
+        # Check current pool configuration
+        config = self.xmrig_controller.load_config()
+        if config and 'pools' in config and config['pools']:
+            pool = config['pools'][0]
+            pool_url = pool.get('url', 'Unknown')
+            tls_enabled = pool.get('tls', False)
+
+            self.console.print(f"[blue]Current Pool:[/blue] {pool_url}")
+            self.console.print(f"[blue]TLS Enabled:[/blue] {tls_enabled}")
+        else:
+            self.console.print("[red]❌ No pool configuration found[/red]")
+            time.sleep(2)
+            return
+
+        # Test connectivity
+        self.console.print("\n[blue]Testing Network Connectivity:[/blue]")
+        import subprocess
+
+        try:
+            # Extract host and port
+            if ':' in pool_url:
+                host, port = pool_url.rsplit(':', 1)
+                port = int(port)
+            else:
+                self.console.print("[red]❌ Invalid pool URL format[/red]")
+                time.sleep(2)
+                return
+
+            # Test connection
+            result = subprocess.run(['nc', '-z', host, str(port)],
+                                  capture_output=True, timeout=5)
+
+            if result.returncode == 0:
+                self.console.print(f"✅ [green]Port {port} on {host} is accessible[/green]")
+            else:
+                self.console.print(f"❌ [red]Cannot connect to {host}:{port}[/red]")
+
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️  Connectivity test failed: {e}[/yellow]")
+
+        # Suggest fixes
+        self.console.print("\n[blue]Suggested Fixes:[/blue]")
+        self.console.print("1. [cyan]Try disabling TLS[/cyan] - Many pools work better without TLS")
+        self.console.print("2. [cyan]Switch to different ports[/cyan] - Try 10001, 10002, or 10128")
+        self.console.print("3. [cyan]Try different MoneroOcean servers[/cyan]:")
+        self.console.print("   • gulf.moneroocean.stream")
+        self.console.print("   • us-west.moneroocean.stream")
+        self.console.print("   • asia.moneroocean.stream")
+        self.console.print("4. [cyan]Try alternative pools[/cyan] - SupportXMR, MineXMR, etc.")
+
+        self.console.print("\n[yellow]Would you like to apply a quick fix?[/yellow]")
+        self.console.print("• Press 1: Disable TLS")
+        self.console.print("• Press 2: Switch to port 10001")
+        self.console.print("• Press 3: Try different server")
+        self.console.print("• Press any other key to return to menu")
+
+        try:
+            choice = input().strip()
+            if choice == "1":
+                self._fix_tls_setting(False)
+            elif choice == "2":
+                self._fix_pool_port("10001")
+            elif choice == "3":
+                self._fix_pool_server()
+            else:
+                return
+        except:
+            pass
+
+        time.sleep(2)
+
+    def _fix_tls_setting(self, enable_tls):
+        """Toggle TLS setting"""
+        config = self.xmrig_controller.load_config()
+        if config and 'pools' in config and config['pools']:
+            config['pools'][0]['tls'] = enable_tls
+            if self.xmrig_controller.save_config(config):
+                status = "enabled" if enable_tls else "disabled"
+                self.console.print(f"[green]✅ TLS {status} in configuration[/green]")
+            else:
+                self.console.print("[red]❌ Failed to update configuration[/red]")
+
+    def _fix_pool_port(self, new_port):
+        """Change pool port"""
+        config = self.xmrig_controller.load_config()
+        if config and 'pools' in config and config['pools']:
+            current_url = config['pools'][0]['url']
+            if ':' in current_url:
+                host = current_url.rsplit(':', 1)[0]
+                config['pools'][0]['url'] = f"{host}:{new_port}"
+                if self.xmrig_controller.save_config(config):
+                    self.console.print(f"[green]✅ Pool port changed to {new_port}[/green]")
+                else:
+                    self.console.print("[red]❌ Failed to update configuration[/red]")
+
+    def _fix_pool_server(self):
+        """Switch to a different MoneroOcean server"""
+        servers = [
+            "gulf.moneroocean.stream:10001",
+            "us-west.moneroocean.stream:10001",
+            "asia.moneroocean.stream:10001"
+        ]
+
+        config = self.xmrig_controller.load_config()
+        if config and 'pools' in config and config['pools']:
+            # Try the next server in the list
+            current_url = config['pools'][0]['url']
+            try:
+                current_index = next(i for i, server in enumerate(servers)
+                                   if server.split(':')[0] in current_url)
+                next_index = (current_index + 1) % len(servers)
+            except (StopIteration, ValueError):
+                next_index = 0
+
+            config['pools'][0]['url'] = servers[next_index]
+            if self.xmrig_controller.save_config(config):
+                self.console.print(f"[green]✅ Switched to {servers[next_index]}[/green]")
+            else:
+                self.console.print("[red]❌ Failed to update configuration[/red]")
 
     def run(self):
         """Main UI loop"""
