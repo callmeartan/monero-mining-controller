@@ -1,0 +1,91 @@
+{
+    "pools": [
+        {
+            "name": "SupportXMR",
+            "url": "pool.supportxmr.com",
+            "port": 3333,
+            "fee": 0.6,
+            "min_payout": 0.1,
+            "type": "PPLNS",
+            "location": "Global",
+            "description": "Popular Monero-only pool with low fees and active community. Good for beginners.",
+            "features": ["Monero-only", "Low fees", "Community support"],
+            "recommended": true
+        },
+        {
+            "name": "MineXMR",
+            "url": "pool.minexmr.com",
+            "port": 4444,
+            "fee": 1.0,
+            "min_payout": 0.1,
+            "type": "PPLNS",
+            "location": "Global",
+            "description": "Well-established pool with good hashrate distribution and reliable payouts.",
+            "features": ["Stable", "Good uptime", "Regular payouts"],
+            "recommended": true
+        },
+        {
+            "name": "MoneroOcean",
+            "url": "gulf.moneroocean.stream",
+            "port": 10128,
+            "fee": 0.5,
+            "min_payout": 0.003,
+            "type": "PPLNS",
+            "location": "Global",
+            "description": "Popular pool with very low minimum payout and automatic coin switching.",
+            "features": ["Very low min payout", "Auto coin switching", "High hashrate"],
+            "recommended": true
+        },
+        {
+            "name": "P2Pool",
+            "url": "p2pool.io",
+            "port": 37889,
+            "fee": 0.0,
+            "min_payout": 0.0003,
+            "type": "P2P",
+            "location": "Decentralized",
+            "description": "Decentralized pool that eliminates the need for centralized mining pools.",
+            "features": ["No fees", "Decentralized", "Privacy-focused"],
+            "recommended": true
+        },
+        {
+            "name": "Nanopool",
+            "url": "xmr-us-east1.nanopool.org",
+            "port": 14433,
+            "fee": 1.0,
+            "min_payout": 1.0,
+            "type": "PPS",
+            "location": "US East",
+            "description": "Established multi-currency pool with higher minimum payout threshold.",
+            "features": ["Multi-currency", "PPS payment", "High min payout"],
+            "recommended": false
+        },
+        {
+            "name": "HashVault",
+            "url": "monero.hashvault.pro",
+            "port": 80,
+            "fee": 0.9,
+            "min_payout": 0.5,
+            "type": "PPLNS",
+            "location": "Global",
+            "description": "Reliable pool with competitive fees and good performance.",
+            "features": ["Stable", "Competitive fees", "Good support"],
+            "recommended": false
+        }
+    ],
+    "last_updated": "2025-01-07",
+    "notes": {
+        "fee_comparison": "Lower fees = higher earnings, but consider reliability and features",
+        "min_payout": "Lower minimum payout = more frequent but smaller payments",
+        "pool_type": {
+            "PPLNS": "Pay Per Last N Shares - pays based on shares in last N minutes",
+            "PPS": "Pay Per Share - pays fixed amount per share, higher fees",
+            "P2P": "Peer-to-peer - decentralized, no central operator"
+        },
+        "recommendations": {
+            "beginners": "SupportXMR or MineXMR - good balance of fees and reliability",
+            "advanced": "P2Pool - for privacy-conscious miners",
+            "low_threshold": "MoneroOcean - for frequent small payouts"
+        }
+    }
+}
