@@ -5,6 +5,7 @@ import subprocess
 import threading
 import signal
 import sys
+import queue
 from pathlib import Path
 import psutil
 from rich.console import Console
@@ -262,6 +263,7 @@ class MiningMonitor:
         self.start_time = time.time()
         self.stats = {
             'hashrate': 0.0,
+            'peak_hashrate': 0.0,
             'shares': {'accepted': 0, 'rejected': 0},
             'uptime': 0,
             'start_time': time.time()
@@ -328,7 +330,11 @@ class MiningMonitor:
                                     rate_part = rate_part[:-1]
 
                                 try:
-                                    self.stats['hashrate'] = float(rate_part) * multiplier
+                                    new_hashrate = float(rate_part) * multiplier
+                                    self.stats['hashrate'] = new_hashrate
+                                    # Track peak hashrate
+                                    if new_hashrate > self.stats['peak_hashrate']:
+                                        self.stats['peak_hashrate'] = new_hashrate
                                 except ValueError:
                                     pass
                             break
@@ -369,10 +375,16 @@ class MiningMonitor:
         system_stats = self.get_system_stats()
         uptime_str = self._format_uptime(system_stats['uptime'])
 
+        # Calculate acceptance rate
+        total_shares = self.stats['shares']['accepted'] + self.stats['shares']['rejected']
+        acceptance_rate = (self.stats['shares']['accepted'] / total_shares * 100) if total_shares > 0 else 0
+
         return {
             'hashrate': self.stats['hashrate'],
+            'peak_hashrate': self.stats['peak_hashrate'],
             'accepted_shares': self.stats['shares']['accepted'],
             'rejected_shares': self.stats['shares']['rejected'],
+            'acceptance_rate': acceptance_rate,
             'cpu_usage': system_stats['cpu_usage'],
             'memory_usage': system_stats['memory'],
             'uptime': uptime_str,
@@ -515,21 +527,103 @@ class MiningUI:
         self.selected_pool = None
         self.wallet_address = None
 
+    def _get_performance_level(self, hashrate):
+        """Determine performance level based on hashrate"""
+        if hashrate <= 0:
+            return "stopped", "dim", ""
+        elif hashrate < 1000:  # < 1 KH/s
+            return "slow", "yellow", "🐌"
+        elif hashrate < 10000:  # < 10 KH/s
+            return "good", "green", "👍"
+        elif hashrate < 100000:  # < 100 KH/s
+            return "fast", "bright_green", "🚀"
+        elif hashrate < 1000000:  # < 1 MH/s
+            return "blazing", "bold bright_green", "🔥"
+        else:  # >= 1 MH/s
+            return "legendary", "bold bright_cyan", "⚡💎"
+
+    def _format_hashrate(self, hashrate):
+        """Format hashrate with appropriate units and visual styling"""
+        if hashrate <= 0:
+            return Text("N/A", style="dim")
+
+        level, style, emoji = self._get_performance_level(hashrate)
+
+        # Format with appropriate units
+        if hashrate >= 1000000:  # MH/s
+            value = hashrate / 1000000
+            unit = "MH/s"
+        elif hashrate >= 1000:  # KH/s
+            value = hashrate / 1000
+            unit = "KH/s"
+        else:  # H/s
+            value = hashrate
+            unit = "H/s"
+
+        # Create styled text
+        text = Text()
+        text.append(f"{value:.1f} {unit}", style=style)
+
+        # Add celebration for high performance
+        if level in ["blazing", "legendary"]:
+            text.append(f" {emoji}", style="bold yellow")
+            if level == "legendary":
+                text.append(" LEGENDARY!", style="bold bright_magenta")
+        elif level == "fast":
+            text.append(f" {emoji}", style="bright_green")
+
+        return text
+
+    def _get_status_style(self, status):
+        """Get styled text for mining status"""
+        if status == "Running":
+            return Text("▶️ Running", style="bold bright_green")
+        elif status == "Stopped":
+            return Text("⏹️ Stopped", style="bold red")
+        elif status == "Starting":
+            return Text("⏳ Starting", style="bold yellow")
+        else:
+            return Text(status, style="white")
+
     def create_stats_panel(self):
         """Create statistics display panel"""
         stats = self.monitor.get_stats_summary()
 
         table = Table(title="Mining Statistics")
         table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green")
+        table.add_column("Value")
 
-        table.add_row("Status", stats['status'])
-        table.add_row("Hashrate", f"{stats['hashrate']:.1f} H/s" if stats['hashrate'] > 0 else "N/A")
-        table.add_row("Accepted Shares", str(stats['accepted_shares']))
-        table.add_row("Rejected Shares", str(stats['rejected_shares']))
-        table.add_row("CPU Usage", f"{stats['cpu_usage']:.1f}%")
-        table.add_row("Memory Usage", f"{stats['memory_usage']:.1f}%")
-        table.add_row("Uptime", stats['uptime'])
+        # Enhanced status display
+        status_text = self._get_status_style(stats['status'])
+        table.add_row("Status", status_text)
+
+        # Enhanced hashrate display with fun formatting
+        hashrate_text = self._format_hashrate(stats['hashrate'])
+        table.add_row("Hashrate", hashrate_text)
+
+        # Peak hashrate display
+        if stats['peak_hashrate'] > 0:
+            peak_text = self._format_hashrate(stats['peak_hashrate'])
+            peak_text.append(" (Peak)", style="dim")
+            table.add_row("Peak Hashrate", peak_text)
+
+        table.add_row("Accepted Shares", Text(str(stats['accepted_shares']), style="green"))
+        table.add_row("Rejected Shares", Text(str(stats['rejected_shares']), style="red"))
+
+        # Acceptance rate
+        acceptance_rate = stats.get('acceptance_rate', 0)
+        acceptance_style = "green" if acceptance_rate >= 95 else "yellow" if acceptance_rate >= 90 else "red"
+        table.add_row("Acceptance Rate", Text(f"{acceptance_rate:.1f}%", style=acceptance_style))
+
+        # CPU usage with color coding
+        cpu_style = "green" if stats['cpu_usage'] < 70 else "yellow" if stats['cpu_usage'] < 90 else "red"
+        table.add_row("CPU Usage", Text(f"{stats['cpu_usage']:.1f}%", style=cpu_style))
+
+        # Memory usage with color coding
+        mem_style = "green" if stats['memory_usage'] < 70 else "yellow" if stats['memory_usage'] < 90 else "red"
+        table.add_row("Memory Usage", Text(f"{stats['memory_usage']:.1f}%", style=mem_style))
+
+        table.add_row("Uptime", Text(stats['uptime'], style="cyan"))
 
         return Panel(table, title="Statistics", border_style="blue")
 
@@ -558,6 +652,20 @@ class MiningUI:
 
         return Panel(menu_text, title="Menu", border_style="green")
 
+    def _display_ui(self):
+        """Display the current UI state"""
+        self.console.clear()
+        self.console.print("[bold blue]🚀 Monero Mining Controller[/bold blue]")
+        self.console.print("[dim]Control your XMRig mining with dynamic CPU allocation[/dim]\n")
+
+        # Create layout
+        stats_panel = self.create_stats_panel()
+        menu_panel = self.create_menu_panel()
+
+        layout = Columns([stats_panel, menu_panel], equal=True)
+        self.console.print(Align.center(layout))
+        self.console.print()  # Add a blank line before prompt
+
     def handle_menu_choice(self, choice):
         """Handle menu selection"""
         if choice == "1":
@@ -574,11 +682,11 @@ class MiningUI:
         elif choice == "4":
             if not self.selected_pool:
                 self.console.print("[red]Please select a mining pool first![/red]")
-                Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+                time.sleep(2)  # Brief pause to show message
                 return
             if not self.wallet_address:
                 self.console.print("[red]Please set your wallet address first![/red]")
-                Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+                time.sleep(2)  # Brief pause to show message
                 return
 
             # Update config with pool and wallet
@@ -590,7 +698,7 @@ class MiningUI:
                     self.console.print(f"[red]{message}[/red]")
             else:
                 self.console.print("[red]Failed to update configuration[/red]")
-            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+            time.sleep(2)  # Brief pause to show message
 
         elif choice == "5":
             success, message = self.xmrig_controller.stop_mining()
@@ -598,12 +706,12 @@ class MiningUI:
                 self.console.print(f"[yellow]{message}[/yellow]")
             else:
                 self.console.print(f"[red]{message}[/red]")
-            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+            time.sleep(2)  # Brief pause to show message
 
         elif choice == "6":
             if not self.selected_pool or not self.wallet_address:
                 self.console.print("[red]Please select pool and set wallet address first![/red]")
-                Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+                time.sleep(2)  # Brief pause to show message
                 return
 
             if self.xmrig_controller.update_pool_config(self.selected_pool, self.wallet_address):
@@ -614,15 +722,15 @@ class MiningUI:
                     self.console.print(f"[red]{message}[/red]")
             else:
                 self.console.print("[red]Failed to update configuration[/red]")
-            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+            time.sleep(2)  # Brief pause to show message
 
         elif choice == "7":
             self._view_configuration()
-            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+            time.sleep(3)  # Longer pause for configuration viewing
 
         elif choice == "8":
             self.pool_selector.display_pool_comparison(self.console)
-            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+            time.sleep(3)  # Longer pause for pool comparison viewing
 
         elif choice == "0":
             self.xmrig_controller.stop_mining()
@@ -630,7 +738,7 @@ class MiningUI:
 
         else:
             self.console.print("[red]Invalid choice![/red]")
-            Prompt.ask("\nPress Enter to continue", default="", show_default=False)
+            time.sleep(2)  # Brief pause for error message
 
     def _set_wallet_address(self):
         """Set wallet address"""
@@ -685,20 +793,6 @@ class MiningUI:
         else:
             self.console.print("[red]Could not load configuration[/red]")
 
-    def _display_ui(self):
-        """Display the current UI state"""
-        self.console.clear()
-        self.console.print("[bold blue]🚀 Monero Mining Controller[/bold blue]")
-        self.console.print("[dim]Control your XMRig mining with dynamic CPU allocation[/dim]\n")
-        
-        # Create layout
-        stats_panel = self.create_stats_panel()
-        menu_panel = self.create_menu_panel()
-        
-        layout = Columns([stats_panel, menu_panel], equal=True)
-        self.console.print(Align.center(layout))
-        self.console.print()  # Add a blank line before prompt
-
     def run(self):
         """Main UI loop"""
         # Setup signal handlers
@@ -711,15 +805,14 @@ class MiningUI:
         signal.signal(signal.SIGTERM, signal_handler)
 
         while self.running:
-            # Display the UI
+            # Display current state
             self._display_ui()
-            
+
             # Get user input
             try:
                 choice = Prompt.ask("Enter your choice", console=self.console, show_default=False)
                 self.handle_menu_choice(choice)
             except KeyboardInterrupt:
-                self.xmrig_controller.stop_mining()
                 break
             except EOFError:
                 break

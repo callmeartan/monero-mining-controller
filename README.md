@@ -3,13 +3,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-A Python-based terminal application for controlling XMRig Monero mining with dynamic CPU allocation and pool selection.
+A Python-based terminal application for controlling XMRig Monero mining with dynamic CPU allocation, real-time monitoring, and fun visual feedback for high-performance mining.
 
 ## ✨ Features
 
 - **🎯 Interactive Pool Selection**: Compare mining pools by fees, minimum payout, and features
 - **⚡ Dynamic CPU Control**: Adjust CPU threads and priority in real-time
-- **📊 Real-time Monitoring**: Live statistics dashboard showing hashrate, shares, and system usage
+- **🚀 Real-Time Dashboard**: Auto-refreshing statistics with fun visual feedback for high performance
+- **🎊 Performance Celebration**: Dynamic emojis and colors based on hashrate achievements:
+  - 🐌 Slow (< 1 KH/s) • 👍 Good (1-10 KH/s) • 🚀 Fast (10-100 KH/s)
+  - 🔥 Blazing (100 KH/s - 1 MH/s) • ⚡💎 Legendary (≥ 1 MH/s)
+- **📊 Advanced Monitoring**: Peak hashrate tracking, acceptance rates, and color-coded system usage
 - **🛠️ Easy Configuration**: Guided setup with wallet address and pool configuration
 - **🔄 Process Management**: Start, stop, and restart XMRig with updated settings
 - **🌍 Cross-Platform**: Supports macOS, Linux, and Windows
@@ -75,7 +79,7 @@ Follow the interactive guide to:
 5. **Start mining**:
    - The app updates XMRig configuration automatically
    - Starts the mining process
-   - Real-time statistics dashboard appears
+   - Real-time auto-refreshing dashboard appears with visual performance feedback
 
 ### 🎯 Pool Recommendations
 
@@ -104,13 +108,15 @@ Follow the interactive guide to:
 
 ## Monitoring
 
-The application provides real-time statistics:
+The application provides a real-time auto-refreshing dashboard with visual excitement:
 
-- **Mining Status**: Running/Stopped
-- **Hashrate**: Current mining speed (H/s)
-- **Shares**: Accepted/Rejected share counts
-- **System Usage**: CPU and memory usage
+- **Mining Status**: Enhanced with icons (▶️ Running, ⏹️ Stopped, ⏳ Starting)
+- **Hashrate**: Current mining speed with performance-based styling and emojis
+- **Peak Hashrate**: Tracks your best mining performance ever
+- **Shares**: Accepted/Rejected counts with acceptance rate percentage
+- **System Usage**: Color-coded CPU and memory usage (green/yellow/red)
 - **Uptime**: Mining session duration
+- **Auto-Refresh**: Dashboard updates every second for live monitoring
 
 ## Configuration Files
 
@@ -126,35 +132,6 @@ The application provides real-time statistics:
 - Use a dedicated mining wallet for security
 - Consider using a hardware wallet for large amounts
 
-## Troubleshooting
-
-### XMRig Won't Start
-- Check that XMRig binary exists and is executable
-- Verify wallet address format
-- Ensure pool URL and port are correct
-- Check macOS security settings for unsigned binaries
-
-### Low Hashrate
-- Increase CPU threads in configuration
-- Lower CPU priority for more aggressive mining
-- Close other CPU-intensive applications
-- Ensure Mac is plugged in (prevents power management throttling)
-
-### Pool Connection Issues
-- Verify pool URL and port
-- Check internet connection
-- Try different pool servers
-- Some pools may have geo-restrictions
-
-### Python Errors
-- Install dependencies: `pip install -r requirements.txt`
-- Ensure Python 3.8+ is being used
-- Check for conflicting Python installations
-
-### Permission Errors
-```bash
-chmod +x xmrig
-```
 
 ## Advanced Usage
 
