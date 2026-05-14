@@ -1146,7 +1146,14 @@ class MiningUI:
                 api_url = f"https://api.moneroocean.stream/miner/{self.wallet_address}/stats"
                 self.console.print("[dim]Fetching data from MoneroOcean API...[/dim]")
                 
-                with urllib.request.urlopen(api_url, timeout=10) as response:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json',
+                    'Connection': 'keep-alive'
+                }
+                
+                request = urllib.request.Request(api_url, headers=headers)
+                with urllib.request.urlopen(request, timeout=15) as response:
                     data = json.loads(response.read().decode())
                 
                 # Parse MoneroOcean API response
