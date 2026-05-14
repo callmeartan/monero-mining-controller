@@ -33,19 +33,22 @@ def detect_platform():
     system = platform.system().lower()
     machine = platform.machine().lower()
 
-    if system == "darwin":  # macOS
-        if "arm64" in machine or "aarch64" in machine:
-            return "macos-arm64"
-        else:
-            return "macos-x64"
+    if system == "darwin":
+        try:
+            proc_info = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+            is_intel = "Intel" in proc_info
+        except:
+            is_intel = "arm" not in machine and "aarch64" not in machine
+        
+        return "macos-x64" if is_intel else "macos-arm64"
     elif system == "linux":
-        if "x86_64" in machine:
+        if "x86_64" in machine or "amd64" in machine:
             return "linux-x64"
-        elif "aarch64" in machine:
+        elif "aarch64" in machine or "arm64" in machine:
             return "linux-arm64"
         else:
             return "linux-x86"
-    elif system == "windows":
+    elif system == "windows" or system == "nt":
         return "windows-x64"
     else:
         return None
@@ -64,35 +67,38 @@ def download_xmrig(platform_type):
         print("❌ Could not fetch XMRig releases. Please download manually from https://github.com/xmrig/xmrig/releases")
         return False
 
-    # Find the correct asset for our platform
-    asset_name = None
-    if platform_type == "macos-arm64":
-        asset_name = "xmrig-6.25.0-macos-arm64.tar.gz"
-    elif platform_type == "macos-x64":
-        asset_name = "xmrig-6.25.0-macos-x64.tar.gz"
-    elif platform_type == "linux-x64":
-        asset_name = "xmrig-6.25.0-linux-x64.tar.gz"
-    elif platform_type == "linux-arm64":
-        asset_name = "xmrig-6.25.0-linux-arm64.tar.gz"
-    elif platform_type == "windows-x64":
-        asset_name = "xmrig-6.25.0-msvc-win64.zip"
-
-    if not asset_name:
+    release_version = release_data.get("tag_name", "").lstrip("v")
+    
+    platform_extensions = {
+        "macos-arm64": "macos-arm64.tar.gz",
+        "macos-x64": "macos-x64.tar.gz",
+        "linux-x64": "linux-x64.tar.gz",
+        "linux-arm64": "linux-arm64.tar.gz",
+        "windows-x64": "msvc-win64.zip"
+    }
+    ext = platform_extensions.get(platform_type)
+    if not ext:
         print(f"❌ Unsupported platform: {platform_type}")
         return False
 
-    # Find download URL
+    asset_pattern = f"xmrig-{release_version}" if platform_type != "windows-x64" else f"xmrig-{release_version}-windows"
+    
     download_url = None
     for asset in release_data.get("assets", []):
-        if asset_name in asset["name"]:
-            download_url = asset["browser_download_url"]
-            break
+        asset_name = asset["name"]
+        if platform_type == "windows-x64":
+            if f"xmrig-{release_version}" in asset_name and ext in asset_name:
+                download_url = asset["browser_download_url"]
+                break
+        else:
+            if ext in asset_name and f"xmrig-{release_version}" in asset_name:
+                download_url = asset["browser_download_url"]
+                break
 
     if not download_url:
-        print(f"❌ Could not find download URL for {asset_name}")
+        print(f"❌ Could not find download URL for {platform_type}")
         return False
 
-    # Download the file
     filename = f"xmrig-{platform_type}.tar.gz" if platform_type != "windows-x64" else f"xmrig-{platform_type}.zip"
 
     try:
