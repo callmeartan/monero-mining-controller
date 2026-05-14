@@ -56,7 +56,9 @@ def download_xmrig(platform_type):
 
     # Get latest release info
     try:
-        with urllib.request.urlopen("https://api.github.com/repos/xmrig/xmrig/releases/latest") as response:
+        request = urllib.request.Request("https://api.github.com/repos/xmrig/xmrig/releases/latest")
+        request.add_header("User-Agent", "Python")
+        with urllib.request.urlopen(request) as response:
             release_data = json.loads(response.read().decode())
     except:
         print("❌ Could not fetch XMRig releases. Please download manually from https://github.com/xmrig/xmrig/releases")
@@ -95,7 +97,9 @@ def download_xmrig(platform_type):
 
     try:
         print(f"📥 Downloading from: {download_url}")
-        with urllib.request.urlopen(download_url) as response, open(filename, 'wb') as out_file:
+        request = urllib.request.Request(download_url)
+        request.add_header("User-Agent", "Python")
+        with urllib.request.urlopen(request) as response, open(filename, 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
     except:
         print("❌ Download failed. Please download manually.")
