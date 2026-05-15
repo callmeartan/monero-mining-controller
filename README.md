@@ -7,7 +7,7 @@
 
 ## ✨ Features
 
-- **Interactive Pool Selection** - Compare 6+ popular pools with detailed metrics
+- **Interactive Pool Selection** - Compare 6+ popular pools with detailed metrics (SupportXMR, MineXMR, MoneroOcean, P2Pool, Nanopool, HashVault)
 - **Dynamic CPU Control** - Real-time thread and priority adjustment
 - **Real-Time Dashboard** - Live statistics with auto-refresh and visual performance indicators
 - **Settings Persistence** - Remembers your pool and wallet between sessions
@@ -25,7 +25,7 @@
 ### Automated Setup (Recommended)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/monero-mining-controller.git
+git clone https://github.com/anomalyco/monero-mining-controller.git
 cd monero-mining-controller
 python setup.py
 ```
@@ -79,12 +79,14 @@ python mining_controller.py
 
 ## 🏊 Recommended Pools
 
-| Pool | Fee | Min Payout | Best For |
-|------|-----|------------|----------|
-| **MoneroOcean** ⭐⭐⭐ | 0.5% | 0.003 XMR | Most users, frequent payouts |
-| **SupportXMR** ⭐⭐ | 0.6% | 0.1 XMR | Beginners, community support |
-| **MineXMR** ⭐⭐ | 1.0% | 0.1 XMR | Stable, established pool |
-| **P2Pool** ⭐⭐ | 0% | 0.0003 XMR | Privacy-focused, decentralized |
+| Pool | Fee | Min Payout | Type | Best For |
+|------|-----|------------|------|----------|
+| **MoneroOcean** ⭐ | 0.5% | 0.003 XMR | PPLNS | Frequent payouts, auto coin switching |
+| **SupportXMR** ⭐ | 0.6% | 0.1 XMR | PPLNS | Beginners, community support |
+| **MineXMR** ⭐ | 1.0% | 0.1 XMR | PPLNS | Stable, established pool |
+| **P2Pool** ⭐ | 0% | 0.0003 XMR | P2P | Privacy-focused, decentralized |
+| **Nanopool** | 1.0% | 1.0 XMR | PPS | Multi-currency, PPS payments |
+| **HashVault** | 0.9% | 0.5 XMR | PPLNS | Competitive fees, reliable |
 
 ## ⚙️ Configuration
 
